@@ -8,13 +8,17 @@ from sys import exit, stderr
 # Third party libraries
 import ffmpeg
 import numpy as np
+import pyaudio
 import websockets
 
 
 def handle_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--file', type=str, required=True, help='Path to audio file for assess')
+    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group.add_argument('--file', type=str, help='Path to audio file for assess')
+    input_group.add_argument('--microphone', action='store_true', help='Capture audio from computer microphone')
+
     parser.add_argument('--request-id', type=str, default='', help='Request id. [DEFAULT] empty')
     parser.add_argument('--vad-segment-duration', type=float, choices=[0.01, 0.02, 0.03], default=0.01, help='Duration for each VAD segment, [DEFAULT] 0.01')
     parser.add_argument('--bit-depth', type=int, default=32, help='Audio sample bit depth. [DEFAULT] 32')
@@ -75,37 +79,86 @@ def asr_stop_message(keep_connection: bool) -> str:
     return json.dumps(stop_message)
 
 
-async def main() -> None:
-    args = handle_args()
-    print(args)
-    # A quick sanity check.
-    assert str(args.bit_depth) == args.encoding[1: 3], "Contradiction in bit depth and encoding: %s does not match %s" % (args.bit_depth, args.encoding)
+async def record_and_send(ws, sample_rate: int, encoding: str, base64: bool) -> None:
+    if encoding == 's16le':
+        audio_format = pyaudio.paInt16
+    elif encoding == 's32le':
+        audio_format = pyaudio.paInt32
+    elif encoding == 'f32le':
+        audio_format = pyaudio.paFloat32
+    else:
+        # pyaudio does not support float 64.
+        print("Microphone does not support f64 audio, using f32 instead", file=stderr)
+        encoding = 'f32le'
+        audio_format = pyaudio.paFloat32
+
+    audio = pyaudio.PyAudio()
+    stream = audio.open(format=audio_format, channels=1, rate=sample_rate, input=True, frames_per_buffer=16000)
 
     try:
-        audio = read_audio(args.file, args.encoding, args.sample_rate)
+        print("Recording...")
+        while True:
+            data = stream.read(16000)
+            if base64:
+                await ws.send(asr_audio_message(data))
+            else:
+                await ws.send(data)
+    except KeyboardInterrupt:
+        print("Finished recording.")
+    finally:
+        stream.stop_stream()
+        stream.close()
+        audio.terminate()
+        stop_message = asr_stop_message(False)
+        await ws.send(stop_message)
+
+
+async def read_and_send(ws, file_path: str, encoding: str, bit_depth: int, sample_rate: int, base64: bool) -> None:
+    try:
+        audio = read_audio(file_path, encoding, sample_rate)
     except FileNotFoundError as e:
         print("Cannot find file:", e, file=stderr)
         exit(-1)
 
-    start_message = asr_start_message(args.request_id, args.vad_segment_duration, args.bit_depth, args.sample_rate, args.encoding, args.max_interval)
-    stop_message = asr_stop_message(args.keep_connection)
-
     # Each chunk should represent 2 sec of audio.
-    chunk_size = 2 * args.sample_rate * (args.bit_depth // 8)
+    chunk_size = 2 * sample_rate * (bit_depth // 8)
     chunks = (audio[i: i + chunk_size] for i in range(0, len(audio), chunk_size))
+
+    if base64:
+        for chunk in chunks:
+            await ws.send(asr_audio_message(chunk))
+    else:
+        for chunk in chunks:
+            await ws.send(chunk)
+    
+    stop_message = asr_stop_message(False)
+    await ws.send(stop_message)
+
+
+async def receive_responses(ws):
+    while True:
+        response = await ws.recv()
+        print(response)
+
+
+async def main() -> None:
+    args = handle_args()
+    # A quick sanity check.
+    assert str(args.bit_depth) == args.encoding[1: 3], "Contradiction in bit depth and encoding: %s does not match %s" % (args.bit_depth, args.encoding)
+
+    start_message = asr_start_message(args.request_id, args.vad_segment_duration, args.bit_depth, args.sample_rate, args.encoding, args.max_interval)
+
     async with websockets.connect(args.ws_url, ping_interval=None) as ws:
         await ws.send(start_message)
-        if args.base64:
-            for chunk in chunks:
-                await ws.send(asr_audio_message(chunk))
+        receive_task = asyncio.create_task(receive_responses(ws))
+
+        if args.microphone:
+            send_task = record_and_send(ws, args.sample_rate, args.encoding, args.base64)
         else:
-            for chunk in chunks:
-                await ws.send(chunk)
-        await ws.send(stop_message)
+            send_task = read_and_send(ws, args.file, args.encoding, args.bit_depth, args.sample_rate, args.base64)
 
-        async for response in ws:
-            print(response)
-
+        # Run both tasks concurrently
+        await asyncio.gather(send_task, receive_task)
 
 if __name__ == '__main__':
     try:

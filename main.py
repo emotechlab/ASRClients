@@ -93,16 +93,20 @@ async def record_and_send(ws, sample_rate: int, encoding: str, base64: bool) -> 
         audio_format = pyaudio.paFloat32
 
     audio = pyaudio.PyAudio()
-    stream = audio.open(format=audio_format, channels=1, rate=sample_rate, input=True, frames_per_buffer=16000)
+    frames_per_buffer = 8192
+    stream = audio.open(format=audio_format, channels=1, rate=sample_rate, input=True, frames_per_buffer=frames_per_buffer)
 
     try:
         print("Recording...")
         while True:
-            data = stream.read(16000)
+            data = stream.read(frames_per_buffer)
             if base64:
                 await ws.send(asr_audio_message(data))
             else:
                 await ws.send(data)
+
+            # Yield control to allow other tasks to run
+            await asyncio.sleep(0)
     except KeyboardInterrupt:
         print("Finished recording.")
     finally:
@@ -136,9 +140,8 @@ async def read_and_send(ws, file_path: str, encoding: str, bit_depth: int, sampl
 
 
 async def receive_responses(ws):
-    while True:
-        response = await ws.recv()
-        print(response)
+    async for message in ws:
+        print(message)
 
 
 async def main() -> None:
@@ -148,9 +151,9 @@ async def main() -> None:
 
     start_message = asr_start_message(args.request_id, args.vad_segment_duration, args.bit_depth, args.sample_rate, args.encoding, args.max_interval)
 
-    async with websockets.connect(args.ws_url, ping_interval=None) as ws:
+    async with websockets.connect(args.ws_url) as ws:
         await ws.send(start_message)
-        receive_task = asyncio.create_task(receive_responses(ws))
+        receive_task = receive_responses(ws)
 
         if args.microphone:
             send_task = record_and_send(ws, args.sample_rate, args.encoding, args.base64)

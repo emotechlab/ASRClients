@@ -27,7 +27,7 @@ def handle_args():
     parser.add_argument('--ws-url', type=str, required=True, help='Websocket URL, in the format ws://<IP>:<PORT>/<PATH>')
     parser.add_argument('--base64', action='store_true', help='Whether to transfer base64 encoded audio or just a binary stream')
     parser.add_argument('--keep-connection', action='store_true', help='Whether to keep ws connected after inference finished')
-    parser.add_argument('--auth-token', type=str, required=True, help='Your Emotech authorization token, include it for every requests.')
+    parser.add_argument('--auth-token', type=str, required=True, help='Your Emotech authorization token, include it for every requests')
 
     return parser.parse_args()
 
@@ -134,7 +134,7 @@ async def read_and_send(ws, file_path: str, encoding: str, bit_depth: int, sampl
     else:
         for chunk in chunks:
             await ws.send(chunk)
-    
+
     stop_message = asr_stop_message(False)
     await ws.send(stop_message)
 

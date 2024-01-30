@@ -7,7 +7,6 @@ from sys import exit, stderr
 
 # Third party libraries
 import ffmpeg
-import numpy as np
 import pyaudio
 import websockets
 
@@ -28,6 +27,7 @@ def handle_args():
     parser.add_argument('--ws-url', type=str, required=True, help='Websocket URL, in the format ws://<IP>:<PORT>/<PATH>')
     parser.add_argument('--base64', action='store_true', help='Whether to transfer base64 encoded audio or just a binary stream')
     parser.add_argument('--keep-connection', action='store_true', help='Whether to keep ws connected after inference finished')
+    parser.add_argument('--auth-token', type=str, required=True, help='Your Emotech authorization token, include it for every requests.')
 
     return parser.parse_args()
 
@@ -151,7 +151,11 @@ async def main() -> None:
 
     start_message = asr_start_message(args.request_id, args.vad_segment_duration, args.bit_depth, args.sample_rate, args.encoding, args.max_interval)
 
-    async with websockets.connect(args.ws_url) as ws:
+    headers = {
+        'Authorization': 'Bearer ' + args.auth_token,
+    }
+
+    async with websockets.connect(args.ws_url, extra_headers=headers) as ws:
         await ws.send(start_message)
         receive_task = receive_responses(ws)
 

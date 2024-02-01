@@ -1,12 +1,17 @@
-# StreamingASR
-A Python client for streaming ASR service.
+# ASR Clients
+This repo contains two python clients for Emotech ASR service: Streaming client and non streaming client.
+If you just need to run inference on some `wav` files, then it's recommended to use the non-streaming client for best accuracy.
+However, if you need to capture your microphone input and do inferene on it, then streaming client might be your choice.
 
 
-# Client Documentation
+# Streaming Client Documentation
 ## Command Line Arguments
 
 You can run `python3 main.py --help` to see available command line arguments. Some of them have default options.
 ```text
+usage: streaming_client.py [-h] (--file FILE | --microphone) [--request-id REQUEST_ID] [--vad-segment-duration {0.01,0.02,0.03}] [--bit-depth BIT_DEPTH] [--sample-rate SAMPLE_RATE]
+                           [--encoding {s16le,s32le,f32le,f64le}] [--max-interval MAX_INTERVAL] [--language LANGUAGE] [--base64] [--keep-connection] --auth-token AUTH_TOKEN
+
 optional arguments:
   -h, --help            show this help message and exit
   --file FILE           Path to audio file for assess
@@ -22,9 +27,8 @@ optional arguments:
   --encoding {s16le,s32le,f32le,f64le}
                         Audio sample encoding. [DEFAULT] f32le
   --max-interval MAX_INTERVAL
-                        Max inference interval. WS will return some inference result at least every max_interval seconds. [DEFAULT]
-                        9.0
-  --ws-url WS_URL       Websocket URL, in the format ws://<IP>:<PORT>/<PATH>
+                        Max inference interval. WS will return some inference result at least every max_interval seconds. [DEFAULT] 9.0
+  --language LANGUAGE   Inference language, [Default] auto
   --base64              Whether to transfer base64 encoded audio or just a binary stream
   --keep-connection     Whether to keep ws connected after inference finished
   --auth-token AUTH_TOKEN
@@ -83,19 +87,38 @@ pipwin install pyaudio
 ## Example
 Send a file to server for inference:
 ```shell
-python3 main.py --ws-url=ws://<IP>:<PORT>/<PATH> --file=<PATH/TO/FILE> --auth-token=<YOUR_TOKEN>
+python3 main.py --file=<PATH/TO/FILE> --auth-token=<YOUR_TOKEN> --language=en
 ```
 
 Capture microphone audio:
 ```shell
-python3 main.py --ws-url=ws://<IP>:<PORT>/<PATH> --microphone --auth-token=<YOUR_TOKEN>
+python3 main.py --microphone --auth-token=<YOUR_TOKEN>
 ```
 NB: This will record your microphone FOREVER. Once it starts, you can stop it by pressing `Ctrl + C`.
 
-NB: Use `/assess` endpoint for automatic language detection, or specify a language as `$LANG/assess` for `ws-url` path. E.g, `/en/assess`.
+
+# Non Streaming Client
+## Command Line Arguments
+You can run `python3 non_streaming_client.py --help` to see available command line arguments. Some of them have default options.
+```text
+usage: non_streaming_client.py [-h] --auth-token AUTH_TOKEN --file FILE [--language LANGUAGE] [--version]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --auth-token AUTH_TOKEN
+                        Authorization token get from Emotech LTD
+  --file FILE           Path to the file to be assessed
+  --language LANGUAGE   Specity the language to assess. [Default] auto
+  --version             Get ASR server version
+```
+
+Example:
+```shell
+python3 non_streaming_client.py --file=<PATH/TO/FILE> --auth-token=<YOUR_TOKEN> --language=en
+```
 
 
 ## Test Environment
-The client is tested in MacOS, Ubuntu, Windows.
+The clients are tested in MacOS, Ubuntu, Windows.
 
-The client is tested in Python 3.9, Python 3.11.
+The clients are tested in Python 3.9, Python 3.11.

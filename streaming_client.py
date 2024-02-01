@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import base64
 import json
+import os
 from sys import exit, stderr
 
 # Third party libraries
@@ -24,7 +25,7 @@ def handle_args():
     parser.add_argument('--sample-rate', type=int, default=16000, help='Audio sample rate. [DEFAULT 16000]')
     parser.add_argument('--encoding', type=str, choices=['s16le', 's32le', 'f32le', 'f64le'], default='f32le', help='Audio sample encoding. [DEFAULT] f32le')
     parser.add_argument('--max-interval', type=float, default=9.0, help='Max inference interval. WS will return some inference result at least every max_interval seconds. [DEFAULT] 9.0')
-    parser.add_argument('--ws-url', type=str, required=True, help='Websocket URL, in the format ws://<IP>:<PORT>/<PATH>')
+    parser.add_argument('--language', type=str, default='auto', help='Inference language, [Default] auto')
     parser.add_argument('--base64', action='store_true', help='Whether to transfer base64 encoded audio or just a binary stream')
     parser.add_argument('--keep-connection', action='store_true', help='Whether to keep ws connected after inference finished')
     parser.add_argument('--auth-token', type=str, required=True, help='Your Emotech authorization token, include it for every requests')
@@ -35,17 +36,18 @@ def handle_args():
 def read_audio(file_path: str, encoding: str, sample_rate: int) -> bytes:
     acodec = 'pcm_' + encoding
     ar = str(sample_rate // 1000) + 'k'
+    path = os.path.expanduser(file_path)
     try:
-        _info = ffmpeg.probe(file_path)
+        _info = ffmpeg.probe(path)
         out, _err = (ffmpeg
-                .input(file_path)
+                .input(path)
                 .output('-', format=encoding, acodec=acodec, ac=1, ar=ar)
                 .overwrite_output()
                 .run(capture_stdout=True, capture_stderr=True)
             )
         return out
     except Exception as e:
-        raise FileNotFoundError(file_path)
+        raise FileNotFoundError(path)
 
 
 def asr_start_message(request_id: str, vad_segment_duration: float, bit_depth: int, sample_rate: int, encoding: str, max_interval: float) -> str:
@@ -141,7 +143,8 @@ async def read_and_send(ws, file_path: str, encoding: str, bit_depth: int, sampl
 
 async def receive_responses(ws):
     async for message in ws:
-        print(message)
+        json_ = json.loads(message)
+        print(json.dumps(json_, indent=4))
 
 
 async def main() -> None:
@@ -155,7 +158,12 @@ async def main() -> None:
         'Authorization': 'Bearer ' + args.auth_token,
     }
 
-    async with websockets.connect(args.ws_url, extra_headers=headers) as ws:
+    if args.language == 'auto':
+        url = 'ws://goliath.emotechlab.com:5556/assess'
+    else:
+        url = 'ws://goliath.emotechlab.com:5556/' + args.language + '/assess'
+
+    async with websockets.connect(url, extra_headers=headers) as ws:
         await ws.send(start_message)
         receive_task = receive_responses(ws)
 
@@ -166,6 +174,7 @@ async def main() -> None:
 
         # Run both tasks concurrently
         await asyncio.gather(send_task, receive_task)
+
 
 if __name__ == '__main__':
     try:

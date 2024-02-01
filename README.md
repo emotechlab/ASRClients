@@ -74,7 +74,7 @@ sudo apt-get install ffmpeg libav-tools
 pipe install pyaudio
 ```
 
-On Windows: (UNTESTED, [reference](https://stackoverflow.com/questions/52283840/i-cant-install-pyaudio-on-windows-how-to-solve-error-microsoft-visual-c-14))
+On Windows:
 ```shell
 pip install pipwin
 pipwin install pyaudio
@@ -90,5 +90,12 @@ Capture microphone audio:
 ```shell
 python3 main.py --ws-url=ws://<IP>:<PORT>/<PATH> --microphone --auth-token=<YOUR_TOKEN>
 ```
+NB: This will record your microphone FOREVER. Once it starts, you can stop it by pressing `Ctrl + C`.
 
 NB: Use `/assess` endpoint for automatic language detection, or specify a language as `$LANG/assess` for `ws-url` path. E.g, `/en/assess`.
+
+
+## Test Environment
+The client is tested in MacOS, Ubuntu, Windows.
+
+The client is tested in Python 3.9, Python 3.11.

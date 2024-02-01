@@ -28,7 +28,7 @@ def handle_args():
     parser.add_argument('--language', type=str, default='auto', help='Inference language, [Default] auto')
     parser.add_argument('--base64', action='store_true', help='Whether to transfer base64 encoded audio or just a binary stream')
     parser.add_argument('--keep-connection', action='store_true', help='Whether to keep ws connected after inference finished')
-    parser.add_argument('--auth-token', type=str, required=True, help='Your Emotech authorization token, include it for every requests')
+    parser.add_argument('--auth-token', type=str, required=True, help='Your Emotech authorization token, include it for every request')
 
     return parser.parse_args()
 

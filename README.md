@@ -1,13 +1,13 @@
 # ASR Clients
 This repo contains two python clients for Emotech ASR service: Streaming client and non streaming client.
 If you just need to run inference on some `wav` files, then it's recommended to use the non-streaming client for best accuracy.
-However, if you need to capture your microphone input and do inferene on it, then streaming client might be your choice.
+However, if you need to capture your microphone input and do inference on it, then streaming client might be your choice.
 
 
 # Streaming Client Documentation
 ## Command Line Arguments
 
-You can run `python3 main.py --help` to see available command line arguments. Some of them have default options.
+You can run `python3 main.py --help` to see available command line arguments. Some of them have default option.
 ```text
 usage: streaming_client.py [-h] (--file FILE | --microphone) [--request-id REQUEST_ID] [--vad-segment-duration {0.01,0.02,0.03}] [--bit-depth BIT_DEPTH] [--sample-rate SAMPLE_RATE]
                            [--encoding {s16le,s32le,f32le,f64le}] [--max-interval MAX_INTERVAL] [--language LANGUAGE] [--base64] [--keep-connection] --auth-token AUTH_TOKEN
@@ -32,7 +32,7 @@ optional arguments:
   --base64              Whether to transfer base64 encoded audio or just a binary stream
   --keep-connection     Whether to keep ws connected after inference finished
   --auth-token AUTH_TOKEN
-                        Your Emotech authorization token, include it for every requests
+                        Your Emotech authorization token, include it for every request
 ```
 
 ### `--file` and `--microphone`
@@ -59,10 +59,10 @@ The client uses three open-source library as dependencies:
 
 You can install them via `pip3 install -r requirements.txt`
 
-### If Dependency Installation Failed
-`pyaudio` might failed with a single pip command as it relies on other libraries. Here is a detailed instruction on fixing it:
+### Troubleshooting
+`pyaudio` might failed with a single `pip` command as it relies on other libraries. Here is a detailed instruction on fixing it:
 
-On MaxOS:
+On MacOS:
 ```shell
 # Install brew, skip if you have it already.
 mkdir homebrew && curl -L https://github.com/Homebrew/brew/tarball/master | tar xz --strip 1 -C homebrew
@@ -94,12 +94,12 @@ Capture microphone audio:
 ```shell
 python3 main.py --microphone --auth-token=<YOUR_TOKEN>
 ```
-NB: This will record your microphone FOREVER. Once it starts, you can stop it by pressing `Ctrl + C`.
+NB: This will capture audio from your microphone until it's stopped, you can stop it by pressing `Ctrl + C`.
 
 
 # Non Streaming Client
 ## Command Line Arguments
-You can run `python3 non_streaming_client.py --help` to see available command line arguments. Some of them have default options.
+You can run `python3 non_streaming_client.py --help` to see available command line arguments. Some of them have default option.
 ```text
 usage: non_streaming_client.py [-h] --auth-token AUTH_TOKEN --file FILE [--language LANGUAGE] [--version]
 

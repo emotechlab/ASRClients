@@ -7,7 +7,7 @@ However, if you need to capture your microphone input and do inference on it, th
 # Streaming Client Documentation
 ## Command Line Arguments
 
-You can run `python3 main.py --help` to see available command line arguments. Some of them have default option.
+You can run `python3 streaming_client.py --help` to see the available command line arguments. Some of them have default options.
 ```text
 usage: streaming_client.py [-h] (--file FILE | --microphone) [--request-id REQUEST_ID] [--vad-segment-duration {0.01,0.02,0.03}] [--bit-depth BIT_DEPTH] [--sample-rate SAMPLE_RATE]
                            [--encoding {s16le,s32le,f32le,f64le}] [--max-interval MAX_INTERVAL] [--language LANGUAGE] [--base64] [--keep-connection] --auth-token AUTH_TOKEN
@@ -99,7 +99,7 @@ NB: This will capture audio from your microphone until it's stopped, you can sto
 
 # Non Streaming Client
 ## Command Line Arguments
-You can run `python3 non_streaming_client.py --help` to see available command line arguments. Some of them have default option.
+You can run `python3 non_streaming_client.py --help` to see the available command line arguments. Some of them have default options.
 ```text
 usage: non_streaming_client.py [-h] --auth-token AUTH_TOKEN --file FILE [--language LANGUAGE] [--version]
 

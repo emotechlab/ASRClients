@@ -12,12 +12,13 @@ def handle_args():
     parser.add_argument('--file', type=str, required=True, help='Path to the file to be assessed')
     parser.add_argument('--language', type=str, default='auto', help='Specity the language to assess. [Default] auto')
     parser.add_argument('--version', action='store_true', help='Get ASR server version')
+    parser.add_argument('--endpoint', type=str, default='http://az-asr-ar.api.emotechlab.com:8081', help='URL of the Emotech ASR API to use')
 
     return parser.parse_args()
 
 
 def get_response(args):
-    URL = 'http://goliath.emotechlab.com:5555'
+    URL = args.endpoint
     if args.version:
         url = URL + '/version'
         return requests.get(url)

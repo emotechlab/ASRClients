@@ -9,25 +9,16 @@ However, if you need to capture your microphone input and do inference on it, th
 
 You can run `python3 streaming_client.py --help` to see the available command line arguments. Some of them have default options.
 ```text
-usage: streaming_client.py [-h] (--file FILE | --microphone) [--request-id REQUEST_ID] [--vad-segment-duration {0.01,0.02,0.03}] [--bit-depth BIT_DEPTH] [--sample-rate SAMPLE_RATE]
-                           [--encoding {s16le,s32le,f32le,f64le}] [--max-interval MAX_INTERVAL] [--language LANGUAGE] [--base64] [--keep-connection] --auth-token AUTH_TOKEN
+usage: streaming_client.py [-h] [--request-id REQUEST_ID] [--sample-rate SAMPLE_RATE] [--encoding {s16,s32,f32,f64}] [--language LANGUAGE] [--base64] [--keep-connection] --auth-token AUTH_TOKEN
 
 optional arguments:
   -h, --help            show this help message and exit
-  --file FILE           Path to audio file for assess
-  --microphone          Capture audio from computer microphone
   --request-id REQUEST_ID
                         Request id. [DEFAULT] empty
-  --vad-segment-duration {0.01,0.02,0.03}
-                        Duration for each VAD segment, [DEFAULT] 0.01
-  --bit-depth BIT_DEPTH
-                        Audio sample bit depth. [DEFAULT] 32
   --sample-rate SAMPLE_RATE
                         Audio sample rate. [DEFAULT 16000]
-  --encoding {s16le,s32le,f32le,f64le}
-                        Audio sample encoding. [DEFAULT] f32le
-  --max-interval MAX_INTERVAL
-                        Max inference interval. WS will return some inference result at least every max_interval seconds. [DEFAULT] 9.0
+  --encoding {s16,s32,f32,f64}
+                        Audio sample encoding. [DEFAULT] f32
   --language LANGUAGE   Inference language, [Default] auto
   --base64              Whether to transfer base64 encoded audio or just a binary stream
   --keep-connection     Whether to keep ws connected after inference finished
@@ -85,16 +76,11 @@ pipwin install pyaudio
 ```
 
 ## Example
-Send a file to server for inference:
-```shell
-python3 main.py --file=<PATH/TO/FILE> --auth-token=<YOUR_TOKEN> --language=en
-```
-
 Capture microphone audio:
 ```shell
-python3 main.py --microphone --auth-token=<YOUR_TOKEN>
+python3 main.py --auth-token=<YOUR_TOKEN>
 ```
-NB: This will capture audio from your microphone until it's stopped, you can stop it by pressing `Ctrl + C`.
+NB: This will capture audio from your microphone until the server finds a whole sentence. After that, server will close the connection.
 
 
 # Non Streaming Client

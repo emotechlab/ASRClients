@@ -26,12 +26,6 @@ optional arguments:
                         Your Emotech authorization token, include it for every request
 ```
 
-### `--file` and `--microphone`
-Only one should be provided to specify input source.
-
-### `--encoding` and `--bit-depth`
-They must match, i.e., if you pass `--encoding=s16le --bit-depth=32`, it will be considered invalid.
-
 ### `--base64`
 Toggle this on to transfer `base64` encoded audio data.
 

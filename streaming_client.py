@@ -26,7 +26,7 @@ def handle_args():
     return parser.parse_args()
 
 
-def asr_start_message(request_id: str, sample_rate: int, encoding: str) -> str:
+def asr_start_message(request_id: str, sample_rate: int, encoding: str, keep_connection: bool) -> str:
     start_message = {
         'request':'start',
         'params':{
@@ -34,7 +34,7 @@ def asr_start_message(request_id: str, sample_rate: int, encoding: str) -> str:
             'sample_rate':sample_rate
         },
         'config':{
-            'keep_connection': False
+            'keep_connection': keep_connection
         },
         'channel_index':None
     }
@@ -53,7 +53,7 @@ def asr_audio_message(data: bytes) -> str:
     return json.dumps(audio_message)
 
 
-def asr_stop_message(keep_connection: bool) -> str:
+def asr_stop_message() -> str:
     stop_message = {
         'request': 'stop',
         }
@@ -95,7 +95,7 @@ async def record_and_send(ws, sample_rate: int, encoding: str, base64: bool) -> 
         stream.stop_stream()
         stream.close()
         audio.terminate()
-        stop_message = asr_stop_message(False)
+        stop_message = asr_stop_message()
         await ws.send(stop_message)
 
 
@@ -108,7 +108,7 @@ async def receive_responses(ws):
 async def main() -> None:
     args = handle_args()
 
-    start_message = asr_start_message(args.request_id, args.sample_rate, args.encoding)
+    start_message = asr_start_message(args.request_id, args.sample_rate, args.encoding, args.keep_connection)
 
     headers = {
         'Authorization': 'Bearer ' + args.auth_token,

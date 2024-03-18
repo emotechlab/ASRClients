@@ -43,7 +43,6 @@ The token you get from Emotech, It's used to validate who you are.
 
 ## How To Use
 The client uses three open-source library as dependencies:
-- [ffmpeg_python](https://pypi.org/project/ffmpeg-python/), Apache.
 - [pyaudio](https://pypi.org/project/PyAudio/), MIT license.
 - [websockets](https://pypi.org/project/websockets/), BSD license.
 
@@ -76,11 +75,15 @@ pipwin install pyaudio
 ```
 
 ## Example
-Capture microphone audio:
 ```shell
-python3 main.py --auth-token=<YOUR_TOKEN>
+python3 streaming_client.py --auth-token=<YOUR_TOKEN>
 ```
-NB: This will capture audio from your microphone until the server finds a whole sentence. After that, server will close the connection.
+This will capture audio from your microphone until the server finds a whole sentence. After that, server will close the connection.
+
+```shell
+python3 streaming_client.py --auth-token=<YOUR_TOKEN> --keep_connection
+```
+This will capture audio from your microphone *FOREVER* until you terminate it with `Ctrl+C`.
 
 
 # Non Streaming Client

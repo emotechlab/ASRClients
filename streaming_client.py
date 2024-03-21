@@ -98,7 +98,16 @@ async def record_and_send(ws, sample_rate: int, encoding: str, base64: bool, req
     finally:
         # Save audio.
         filename = './' + request_id + '.wav'
-        wavfile.write(filename, sample_rate, np.frombuffer(b''.join(audio_buffer), dtype=np.float32))
+        if encoding == 's16':
+            numpy_audio = np.frombuffer(b''.join(audio_buffer), dtype=np.int16)
+        elif encoding == 's32':
+            numpy_audio = np.frombuffer(b''.join(audio_buffer), dtype=np.int32)
+        elif encoding == 'f32':
+            numpy_audio = np.frombuffer(b''.join(audio_buffer), dtype=np.float32)
+        else:
+            # Because pyaudio does not support float 64.
+            numpy_audio = np.frombuffer(b''.join(audio_buffer), dtype=np.float32)
+        wavfile.write(filename, sample_rate, numpy_audio)
         print("audio file write to", filename)
 
         stream.stop_stream()
@@ -130,9 +139,9 @@ async def main() -> None:
     }
 
     if args.language == 'auto':
-        url = 'ws://goliath.emotechlab.com:5555/ws/assess'
+        url = 'wss://asr-whisper-http.api.emotechlab.com/ws/assess'
     else:
-        url = 'ws://goliath.emotechlab.com:5555/ws/' + args.language + '/assess'
+        url = 'wss://asr-whisper-http.api.emotechlab.com/ws/' + args.language + '/assess'
 
     async with websockets.connect(url, extra_headers=headers) as ws:
         await ws.send(start_message)

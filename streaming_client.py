@@ -121,7 +121,7 @@ async def record_and_send(ws, sample_rate: int, encoding: str, base64: bool, req
 async def receive_responses(ws, finish_event: asyncio.Event):
     async for message in ws:
         json_ = json.loads(message)
-        print(json.dumps(json_, indent=4))
+        print(json.dumps(json_, indent=4, ensure_ascii=False))
     finish_event.set()
     # Let send task handle audio saving.
     await asyncio.sleep(1)
@@ -140,11 +140,11 @@ async def main() -> None:
     }
 
     if args.language == 'auto':
-        url = 'wss://asr-whisper-http.api.emotechlab.com/ws/assess'
-        # url = 'ws://goliath.emotechlab.com:5555/ws/assess'
+        # url = 'wss://asr-whisper-http.api.emotechlab.com/ws/assess'
+        url = 'ws://goliath.emotechlab.com:5555/ws/assess'
     else:
-        url = 'wss://asr-whisper-http.api.emotechlab.com/ws/' + args.language + '/assess'
-        # url = 'ws://goliath.emotechlab.com:5555/ws/' + args.language + '/assess'
+        # url = 'wss://asr-whisper-http.api.emotechlab.com/ws/' + args.language + '/assess'
+        url = 'ws://goliath.emotechlab.com:5555/ws/' + args.language + '/assess'
 
     async with websockets.connect(url, extra_headers=headers) as ws:
         await ws.send(start_message)

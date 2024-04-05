@@ -1,17 +1,25 @@
 # System libraries.
 import argparse
-import asyncio
 import base64
 import uuid
 import json
+import time
+import threading
+import struct
+from datetime import datetime
 from sys import stderr
 
 # Third party libraries
 import numpy as np
 import pyaudio
 from scipy.io import wavfile
-import websockets
-from websockets.exceptions import ConnectionClosedOK
+import websocket
+from websocket import WebSocketApp
+
+talking = False
+t0 = 0.0
+finish_event = threading.Event()
+request_id = ''
 
 
 def handle_args():
@@ -64,7 +72,9 @@ def asr_stop_message() -> str:
     return json.dumps(stop_message)
 
 
-async def record_and_send(ws, sample_rate: int, encoding: str, base64: bool, request_id: str, finish_event: asyncio.Event, channels: int) -> None:
+def record_and_send(ws, sample_rate: int, encoding: str, base64: bool, request_id: str, finish_event: threading.Event, channels: int) -> None:
+    global talking
+    global t0
     if encoding == 's16':
         audio_format = pyaudio.paInt16
     elif encoding == 's32':
@@ -81,21 +91,30 @@ async def record_and_send(ws, sample_rate: int, encoding: str, base64: bool, req
     frames_per_buffer = 1600
     stream = audio.open(format=audio_format, channels=channels, rate=sample_rate, input=True, frames_per_buffer=frames_per_buffer)
 
+    rms_threshold = 4
     audio_buffer = []
     try:
-        print("Recording...")
+        print(str(datetime.now()), "Recording...")
         while not finish_event.is_set():
             data = stream.read(frames_per_buffer)
+            rms = struct.unpack("%sf" % (len(data) // 4), data)
+            rms_val = sum([abs(x) for x in rms[0:frames_per_buffer]])
+            if rms_val > rms_threshold*2 and not talking:
+                print(str(datetime.now()), 'Started talking')
+                talking = True
+            if rms_val < rms_threshold and talking and t0 == 0.0:
+                t0 = time.time()
+                print(str(datetime.now()), 'Stopped talking')
+            #print(rms_val)
             audio_buffer.append(data)
             if base64:
-                await ws.send(asr_audio_message(data))
+                ws.send_text(asr_audio_message(data))
             else:
-                await ws.send(data)
-
-            # Yield control to allow other tasks to run.
-            await asyncio.sleep(0)
+                ws.send_bytes(data)
     except KeyboardInterrupt:
         print("Finished recording.")
+    except websocket.WebSocketConnectionClosedException:
+        pass
     finally:
         # Save audio.
         filename = './' + request_id + '.wav'
@@ -114,26 +133,43 @@ async def record_and_send(ws, sample_rate: int, encoding: str, base64: bool, req
         stream.stop_stream()
         stream.close()
         audio.terminate()
-        stop_message = asr_stop_message()
-        await ws.send(stop_message)
 
 
-async def receive_responses(ws, finish_event: asyncio.Event):
-    async for message in ws:
-        json_ = json.loads(message)
-        print(json.dumps(json_, indent=4, ensure_ascii=False))
+def on_message(ws, message):
+    global t0
+    try:
+        rsp = json.loads(message)
+        if rsp['confidence'][0] is not None and float(rsp.get('confidence', [0])[0]) > 0.5:
+            print(f"{datetime.now()} {rsp['transcript'][0]}")
+
+        if not rsp.get('is_partial', True):
+            print(f"{datetime.now()} Stream terminated! Response time: {time.time() - t0:.3f}s")
+    except Exception as e:
+        print(f"Error processing message: {e}", file=stderr)
+
+
+def on_close(ws, code, reason):
+    global finish_event
+    print(f"{datetime.now()} WebSocket connection closed.")
     finish_event.set()
-    # Let send task handle audio saving.
-    await asyncio.sleep(1)
+    # ws.close()
 
 
-async def main() -> None:
+def on_error(ws, error):
+    print(f"{datetime.now()} WebSocket error: {error}", file=stderr)
+
+
+def on_open(ws):
+    args = handle_args()  # Assuming args are accessible; you might need to adjust scope or pass as a global
+    start_message = asr_start_message(request_id, args.sample_rate, args.encoding, args.keep_connection, args.channels)
+    ws.send(start_message)
+
+
+def main() -> None:
     args = handle_args()
+    global request_id
     request_id = args.request_id if args.request_id != '' else str(uuid.uuid4())
 
-    start_message = asr_start_message(request_id, args.sample_rate, args.encoding, args.keep_connection, args.channels)
-
-    finish_event = asyncio.Event()
 
     headers = {
         'Authorization': 'Bearer ' + args.auth_token,
@@ -146,20 +182,29 @@ async def main() -> None:
         # url = 'wss://asr-whisper-http.api.emotechlab.com/ws/' + args.language + '/assess'
         url = 'ws://goliath.emotechlab.com:5555/ws/' + args.language + '/assess'
 
-    async with websockets.connect(url, extra_headers=headers) as ws:
-        await ws.send(start_message)
-        receive_task = receive_responses(ws, finish_event)
-        send_task = record_and_send(ws, args.sample_rate, args.encoding, args.base64, request_id, finish_event, args.channels)
+    ws = WebSocketApp(
+        url,
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close,
+        header=headers,
+    )
+    receive_thread = threading.Thread(target=ws.run_forever)
+    receive_thread.start()
 
-        # Run both tasks concurrently
-        await asyncio.gather(send_task, receive_task)
+    send_thread = threading.Thread(target=record_and_send, args=(ws, args.sample_rate, args.encoding, args.base64, request_id, finish_event, args.channels))
+    send_thread.start()
+
+
+    receive_thread.join()
+    finish_event.set()
+    ws.close()
 
 
 if __name__ == '__main__':
     try:
-        asyncio.run(main())
-    except ConnectionClosedOK:
-        pass
+        main()
     except OSError as e:
         print(e, file=stderr)
         print("Below is a summary of your input devices:", file=stderr)

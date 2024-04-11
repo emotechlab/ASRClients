@@ -10,8 +10,8 @@ However, if you need to capture your microphone input and do inference on it, th
 You can run `python3 streaming_client.py --help` to see the available command line arguments. Some of them have default options.
 ```text
 usage: streaming_client.py [-h] [--request-id REQUEST_ID] [--sample-rate SAMPLE_RATE] [--encoding {s16,s32,f32,f64}] [--language LANGUAGE] [--base64] [--keep-connection]
-                           --auth-token AUTH_TOKEN [--channels {1,2}] [--rtf_threshold RTF_THRESHOLD] [--silence_threshold SILENCE_THRESHOLD]
-                           [--partial_interval PARTIAL_INTERVAL]
+                           --auth-token AUTH_TOKEN [--channels {1,2}] [--rtf-threshold RTF_THRESHOLD] [--silence-threshold SILENCE_THRESHOLD]
+                           [--partial-interval PARTIAL_INTERVAL]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -27,11 +27,11 @@ optional arguments:
   --auth-token AUTH_TOKEN
                         Your Emotech authorization token, include it for every request
   --channels {1,2}      Number of channels to send to the server
-  --rtf_threshold RTF_THRESHOLD
+  --rtf-threshold RTF_THRESHOLD
                         Threshold to cancel a Whisper inference task. [DEFAULT] 0.3
-  --silence_threshold SILENCE_THRESHOLD
+  --silence-threshold SILENCE_THRESHOLD
                         Required silence duration in ms after a speech before auto termination. [DEFAULT] 600
-  --partial_interval PARTIAL_INTERVAL
+  --partial-interval PARTIAL_INTERVAL
                         Partial transcription will be generated every x ms. [DEFAULT] 500
 ```
 

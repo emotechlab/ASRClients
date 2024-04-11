@@ -33,9 +33,9 @@ def handle_args():
     parser.add_argument('--keep-connection', action='store_true', help='Whether to keep ws connected after inference finished')
     parser.add_argument('--auth-token', type=str, required=True, help='Your Emotech authorization token, include it for every request')
     parser.add_argument('--channels', type=int, choices=[1, 2], default=1, help='Number of channels to send to the server')
-    parser.add_argument('--rtf_threshold', type=float, default=0.3, help='Threshold to cancel a Whisper inference task. [DEFAULT] 0.3')
-    parser.add_argument('--silence_threshold', type=int, default=600, help='Required silence duration in ms after a speech before auto termination. [DEFAULT] 600')
-    parser.add_argument('--partial_interval', type=int, default=500, help='Partial transcription will be generated every x ms. [DEFAULT] 500')
+    parser.add_argument('--rtf-threshold', type=float, default=0.3, help='Threshold to cancel a Whisper inference task. [DEFAULT] 0.3')
+    parser.add_argument('--silence-threshold', type=int, default=600, help='Required silence duration in ms after a speech before auto termination. [DEFAULT] 600')
+    parser.add_argument('--partial-interval', type=int, default=500, help='Partial transcription will be generated every x ms. [DEFAULT] 500')
 
     return parser.parse_args()
 

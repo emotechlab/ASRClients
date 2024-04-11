@@ -33,11 +33,14 @@ def handle_args():
     parser.add_argument('--keep-connection', action='store_true', help='Whether to keep ws connected after inference finished')
     parser.add_argument('--auth-token', type=str, required=True, help='Your Emotech authorization token, include it for every request')
     parser.add_argument('--channels', type=int, choices=[1, 2], default=1, help='Number of channels to send to the server')
+    parser.add_argument('--rtf_threshold', type=float, default=0.3, help='Threshold to cancel a Whisper inference task. [DEFAULT] 0.3')
+    parser.add_argument('--silence_threshold', type=int, default=600, help='Required silence duration in ms after a speech before auto termination. [DEFAULT] 600')
+    parser.add_argument('--partial_interval', type=int, default=500, help='Partial transcription will be generated every x ms. [DEFAULT] 500')
 
     return parser.parse_args()
 
 
-def asr_start_message(request_id: str, sample_rate: int, encoding: str, keep_connection: bool, channels: int) -> str:
+def asr_start_message(request_id: str, sample_rate: int, encoding: str, keep_connection: bool, channels: int, rtf_thresh: float, silence_thresh: int, partial_interval: int) -> str:
     start_message = {
         'request':'start',
         'params':{
@@ -46,7 +49,10 @@ def asr_start_message(request_id: str, sample_rate: int, encoding: str, keep_con
             'channel_count': channels,
         },
         'config':{
-            'keep_connection': keep_connection
+            'keep_connection': keep_connection,
+            'rtf_threshold': rtf_thresh,
+            'silence_threshold': silence_thresh,
+            'partial_interval': partial_interval,
         },
         'channel_index':None
     }
@@ -139,8 +145,10 @@ def on_message(ws, message):
     global t0
     try:
         rsp = json.loads(message)
-        if rsp['confidence'][0] is not None and float(rsp.get('confidence', [0])[0]) > 0.5:
-            print(f"{datetime.now()} {rsp['transcript'][0]}")
+        print(json.dumps(rsp, indent=4))
+        # if rsp['confidence'][0] is not None and float(rsp.get('confidence', [0])[0]) > 0.5:
+            # print(f"{datetime.now()} {rsp['transcript'][0]} is_candidate = {rsp['is_candidate']}")
+            # print(datetime.now(), json.dumps(rsp, indent=4))
 
         if not rsp.get('is_partial', True):
             print(f"{datetime.now()} Stream terminated! Response time: {time.time() - t0:.3f}s")
@@ -150,9 +158,7 @@ def on_message(ws, message):
 
 def on_close(ws, code, reason):
     global finish_event
-    print(f"{datetime.now()} WebSocket connection closed.")
     finish_event.set()
-    # ws.close()
 
 
 def on_error(ws, error):
@@ -161,7 +167,7 @@ def on_error(ws, error):
 
 def on_open(ws):
     args = handle_args()  # Assuming args are accessible; you might need to adjust scope or pass as a global
-    start_message = asr_start_message(request_id, args.sample_rate, args.encoding, args.keep_connection, args.channels)
+    start_message = asr_start_message(request_id, args.sample_rate, args.encoding, args.keep_connection, args.channels, args.rtf_threshold, args.silence_threshold, args.partial_interval)
     ws.send(start_message)
 
 

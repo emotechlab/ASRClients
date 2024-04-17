@@ -30,7 +30,7 @@ def handle_args():
     parser.add_argument('--encoding', type=str, choices=['s16', 's32', 'f32', 'f64'], default='f32', help='Audio sample encoding. [DEFAULT] f32')
     parser.add_argument('--language', type=str, default='auto', help='Inference language, [Default] auto')
     parser.add_argument('--base64', action='store_true', help='Whether to transfer base64 encoded audio or just a binary stream')
-    parser.add_argument('--keep-connection', action='store_true', help='Whether to keep ws connected after inference finished')
+    parser.add_argument('--single-utterance', action='store_true', help='Whether to keep ws connected after inference finished')
     parser.add_argument('--auth-token', type=str, required=True, help='Your Emotech authorization token, include it for every request')
     parser.add_argument('--channels', type=int, choices=[1, 2], default=1, help='Number of channels to send to the server')
     parser.add_argument('--rtf-threshold', type=float, default=0.3, help='Threshold to cancel a Whisper inference task. [DEFAULT] 0.3')
@@ -40,7 +40,7 @@ def handle_args():
     return parser.parse_args()
 
 
-def asr_start_message(request_id: str, sample_rate: int, encoding: str, keep_connection: bool, channels: int, rtf_thresh: float, silence_thresh: int, partial_interval: int) -> str:
+def asr_start_message(request_id: str, sample_rate: int, encoding: str, single_utterance: bool, channels: int, rtf_thresh: float, silence_thresh: int, partial_interval: int) -> str:
     start_message = {
         'request':'start',
         'params':{
@@ -49,7 +49,7 @@ def asr_start_message(request_id: str, sample_rate: int, encoding: str, keep_con
             'channel_count': channels,
         },
         'config':{
-            'keep_connection': keep_connection,
+            'single_utterance': single_utterance,
             'rtf_threshold': rtf_thresh,
             'silence_threshold': silence_thresh,
             'partial_interval': partial_interval,
@@ -94,7 +94,7 @@ def record_and_send(ws, sample_rate: int, encoding: str, base64: bool, request_i
         audio_format = pyaudio.paFloat32
 
     audio = pyaudio.PyAudio()
-    frames_per_buffer = 1600
+    frames_per_buffer = 80
     stream = audio.open(format=audio_format, channels=channels, rate=sample_rate, input=True, frames_per_buffer=frames_per_buffer)
 
     rms_threshold = 4
@@ -167,7 +167,7 @@ def on_error(ws, error):
 
 def on_open(ws):
     args = handle_args()  # Assuming args are accessible; you might need to adjust scope or pass as a global
-    start_message = asr_start_message(request_id, args.sample_rate, args.encoding, args.keep_connection, args.channels, args.rtf_threshold, args.silence_threshold, args.partial_interval)
+    start_message = asr_start_message(request_id, args.sample_rate, args.encoding, args.single_utterance, args.channels, args.rtf_threshold, args.silence_threshold, args.partial_interval)
     ws.send(start_message)
 
 

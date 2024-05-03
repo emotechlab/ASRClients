@@ -1,0 +1,37 @@
+{
+    "channels": [
+        {
+            "duration": 19.744,
+            "active_duration": 5.72,
+            "speech": 100.0,
+            "non_speech": 0.0,
+            "segments": [
+                {
+                    "start_time": 0.0,
+                    "end_time": 5.0,
+                    "speech": 100.0,
+                    "non_speech": 0.0,
+                    "is_speech": true,
+                    "is_answering_machine": false
+                },
+                {
+                    "start_time": 5.0,
+                    "end_time": 14.0,
+                    "speech": 0.0,
+                    "non_speech": 100.0,
+                    "is_speech": false,
+                    "is_answering_machine": false
+                },
+                {
+                    "start_time": 14.0,
+                    "end_time": 19.0,
+                    "speech": 100.0,
+                    "non_speech": 0.0,
+                    "is_speech": true,
+                    "is_answering_machine": false
+                }
+            ]
+        }
+    ],
+    "request-id": "951feede-12ce-4bf1-9b73-b3bab21785a7"
+}

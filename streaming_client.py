@@ -3,13 +3,17 @@ import argparse
 import base64
 import uuid
 import json
+import os
 import threading
+import time
 from datetime import datetime
 from sys import stderr
 
 # Third party libraries
+import ffmpeg
 import numpy as np
 import pyaudio
+
 from scipy.io import wavfile
 import websocket
 from websocket import WebSocketApp
@@ -31,7 +35,8 @@ def handle_args():
     parser.add_argument('--rtf-threshold', type=float, default=0.3, help='Threshold to cancel a Whisper inference task. [DEFAULT] 0.3')
     parser.add_argument('--silence-threshold', type=int, default=600, help='Required silence duration in ms after a speech before auto termination. [DEFAULT] 600')
     parser.add_argument('--partial-interval', type=int, default=500, help='Partial transcription will be generated every x ms. [DEFAULT] 500')
-
+    parser.add_argument('--file', type=str, default='', help='Use existing audio file instead of microphone data')
+    parser.add_argument('--snsd', type=str, default='', help='Use with --file option to provide a snsd result.')
     return parser.parse_args()
 
 
@@ -151,6 +156,41 @@ def on_open(ws):
     ws.send(start_message)
 
 
+def read_and_send(ws, file_path: str, sample_rate: int, encoding: str, base64: bool, request_id: str, finish_event: threading.Event, channels: int) -> None:
+    print("Reading %s" % file_path)
+    metadata = ffmpeg.probe(file_path)
+    # print(metadata)
+    acodec = 'pcm_' + encoding + 'le'
+    ar = str(sample_rate // 1000) + 'k'
+    try:
+        bytes, _ = (
+            ffmpeg
+                .input(file_path)
+                .output('-', format=encoding + 'le', acodec=acodec, ar=ar, ac=1)
+                .overwrite_output()
+                .run(capture_stdout=True, capture_stderr=True)
+        )
+        print(type(bytes), len(bytes))
+
+        seconds = 0.1
+        chunk_size = int(seconds * sample_rate * int(encoding[1:]) // 8)
+        chunks = (bytes[i: i + chunk_size] for i in range(0, len(bytes), chunk_size))
+
+        if base64:
+            for chunk in chunks:
+                ws.send_text(asr_audio_message(chunk))
+                time.sleep(seconds)
+        else:
+            for chunk in chunks:
+                ws.send_bytes(chunk)
+                time.sleep(seconds)
+        
+        ws.send_text(asr_stop_message())
+        ws.close()
+    except ffmpeg.Error as e:
+        print(e, file=stderr)
+
+
 def main() -> None:
     args = handle_args()
     global request_id
@@ -173,7 +213,11 @@ def main() -> None:
     receive_thread = threading.Thread(target=ws.run_forever)
     receive_thread.start()
 
-    send_thread = threading.Thread(target=record_and_send, args=(ws, args.sample_rate, args.encoding, args.base64, request_id, finish_event, args.channels))
+    args.file = os.path.abspath(args.file)
+    if validate_file_path(args.file):
+        send_thread = threading.Thread(target=read_and_send, args=(ws, args.file, args.sample_rate, args.encoding, args.base64, request_id, finish_event, args.channels))
+    else:
+        send_thread = threading.Thread(target=record_and_send, args=(ws, args.sample_rate, args.encoding, args.base64, request_id, finish_event, args.channels))
     send_thread.start()
 
     try:
@@ -182,6 +226,12 @@ def main() -> None:
         finish_event.set()
         ws.close()
 
+
+def validate_file_path(path: str) -> bool:
+    """
+    Check if a path exists and if it's indeed a file.
+    """
+    return os.path.exists(path) and os.path.isfile(path)
 
 if __name__ == '__main__':
     try:

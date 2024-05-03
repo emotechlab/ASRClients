@@ -3,9 +3,7 @@ import argparse
 import base64
 import uuid
 import json
-import time
 import threading
-import struct
 from datetime import datetime
 from sys import stderr
 
@@ -16,8 +14,6 @@ from scipy.io import wavfile
 import websocket
 from websocket import WebSocketApp
 
-talking = False
-t0 = 0.0
 finish_event = threading.Event()
 request_id = ''
 
@@ -31,7 +27,6 @@ def handle_args():
     parser.add_argument('--language', type=str, default='auto', help='Inference language, [Default] auto')
     parser.add_argument('--base64', action='store_true', help='Whether to transfer base64 encoded audio or just a binary stream')
     parser.add_argument('--single-utterance', action='store_true', help='Whether to keep ws connected after inference finished')
-    parser.add_argument('--auth-token', type=str, required=True, help='Your Emotech authorization token, include it for every request')
     parser.add_argument('--channels', type=int, choices=[1, 2], default=1, help='Number of channels to send to the server')
     parser.add_argument('--rtf-threshold', type=float, default=0.3, help='Threshold to cancel a Whisper inference task. [DEFAULT] 0.3')
     parser.add_argument('--silence-threshold', type=int, default=600, help='Required silence duration in ms after a speech before auto termination. [DEFAULT] 600')
@@ -53,6 +48,7 @@ def asr_start_message(request_id: str, sample_rate: int, encoding: str, single_u
             'rtf_threshold': rtf_thresh,
             'silence_threshold': silence_thresh,
             'partial_interval': partial_interval,
+            'non_partial_interval': 3000
         },
         'channel_index':None
     }
@@ -94,31 +90,19 @@ def record_and_send(ws, sample_rate: int, encoding: str, base64: bool, request_i
         audio_format = pyaudio.paFloat32
 
     audio = pyaudio.PyAudio()
-    frames_per_buffer = 80
+    frames_per_buffer = 1600
     stream = audio.open(format=audio_format, channels=channels, rate=sample_rate, input=True, frames_per_buffer=frames_per_buffer)
 
-    rms_threshold = 4
     audio_buffer = []
     try:
         print(str(datetime.now()), "Recording...")
         while not finish_event.is_set():
             data = stream.read(frames_per_buffer)
-            rms = struct.unpack("%sf" % (len(data) // 4), data)
-            rms_val = sum([abs(x) for x in rms[0:frames_per_buffer]])
-            if rms_val > rms_threshold*2 and not talking:
-                print(str(datetime.now()), 'Started talking')
-                talking = True
-            if rms_val < rms_threshold and talking and t0 == 0.0:
-                t0 = time.time()
-                print(str(datetime.now()), 'Stopped talking')
-            #print(rms_val)
             audio_buffer.append(data)
             if base64:
                 ws.send_text(asr_audio_message(data))
             else:
                 ws.send_bytes(data)
-    except KeyboardInterrupt:
-        print("Finished recording.")
     except websocket.WebSocketConnectionClosedException:
         pass
     finally:
@@ -136,9 +120,11 @@ def record_and_send(ws, sample_rate: int, encoding: str, base64: bool, request_i
         wavfile.write(filename, sample_rate, numpy_audio)
         print("audio file write to", filename)
 
+        finish_event.set()
         stream.stop_stream()
         stream.close()
         audio.terminate()
+        ws.close()
 
 
 def on_message(ws, message):
@@ -146,12 +132,6 @@ def on_message(ws, message):
     try:
         rsp = json.loads(message)
         print(json.dumps(rsp, indent=4))
-        # if rsp['confidence'][0] is not None and float(rsp.get('confidence', [0])[0]) > 0.5:
-            # print(f"{datetime.now()} {rsp['transcript'][0]} is_candidate = {rsp['is_candidate']}")
-            # print(datetime.now(), json.dumps(rsp, indent=4))
-
-        if not rsp.get('is_partial', True):
-            print(f"{datetime.now()} Stream terminated! Response time: {time.time() - t0:.3f}s")
     except Exception as e:
         print(f"Error processing message: {e}", file=stderr)
 
@@ -176,11 +156,6 @@ def main() -> None:
     global request_id
     request_id = args.request_id if args.request_id != '' else str(uuid.uuid4())
 
-
-    headers = {
-        'Authorization': 'Bearer ' + args.auth_token,
-    }
-
     if args.language == 'auto':
         # url = 'wss://asr-whisper-http.api.emotechlab.com/ws/assess'
         url = 'ws://goliath.emotechlab.com:5555/ws/assess'
@@ -194,7 +169,6 @@ def main() -> None:
         on_message=on_message,
         on_error=on_error,
         on_close=on_close,
-        header=headers,
     )
     receive_thread = threading.Thread(target=ws.run_forever)
     receive_thread.start()
@@ -202,10 +176,11 @@ def main() -> None:
     send_thread = threading.Thread(target=record_and_send, args=(ws, args.sample_rate, args.encoding, args.base64, request_id, finish_event, args.channels))
     send_thread.start()
 
-
-    receive_thread.join()
-    finish_event.set()
-    ws.close()
+    try:
+        receive_thread.join()
+    except KeyboardInterrupt:
+        finish_event.set()
+        ws.close()
 
 
 if __name__ == '__main__':

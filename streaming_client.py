@@ -1,25 +1,28 @@
 # System libraries.
 import argparse
 import base64
+import colorlog
 import uuid
 import json
 import os
 import threading
 import time
+from typing import Dict, List, Tuple
 from datetime import datetime
-from sys import stderr
+from sys import exit, stderr
 
 # Third party libraries
 import ffmpeg
 import numpy as np
 import pyaudio
-
 from scipy.io import wavfile
 import websocket
 from websocket import WebSocketApp
 
+# Global variables.
 finish_event = threading.Event()
 request_id = ''
+logger = None
 
 
 def handle_args():
@@ -40,26 +43,26 @@ def handle_args():
     return parser.parse_args()
 
 
-def asr_start_message(request_id: str, sample_rate: int, encoding: str, single_utterance: bool, channels: int, rtf_thresh: float, silence_thresh: int, partial_interval: int) -> str:
+def asr_start_message(args) -> str:
     start_message = {
         'request':'start',
         'params':{
-            'encoding': encoding,
-            'sample_rate': sample_rate,
-            'channel_count': channels,
+            'encoding': args.encoding,
+            'sample_rate': args.sample_rate,
+            'channel_count': args.channels,
         },
         'config':{
-            'single_utterance': single_utterance,
-            'rtf_threshold': rtf_thresh,
-            'silence_threshold': silence_thresh,
-            'partial_interval': partial_interval,
+            'single_utterance': args.single_utterance,
+            'rtf_threshold': args.rtf_threshold,
+            'silence_threshold': args.silence_threshold,
+            'partial_interval': args.partial_interval,
             'non_partial_interval': 3000
         },
         'channel_index':None
     }
     
     if request_id != '':
-        start_message['request_id'] = request_id
+        start_message['request_id'] = args.request_id
     return json.dumps(start_message)
 
 
@@ -79,24 +82,22 @@ def asr_stop_message() -> str:
     return json.dumps(stop_message)
 
 
-def record_and_send(ws, sample_rate: int, encoding: str, base64: bool, request_id: str, finish_event: threading.Event, channels: int) -> None:
-    global talking
-    global t0
-    if encoding == 's16':
+def record_and_send(ws, finish_event: threading.Event, args) -> None:
+    if args.encoding == 's16':
         audio_format = pyaudio.paInt16
-    elif encoding == 's32':
+    elif args.encoding == 's32':
         audio_format = pyaudio.paInt32
-    elif encoding == 'f32':
+    elif args.encoding == 'f32':
         audio_format = pyaudio.paFloat32
     else:
         # pyaudio does not support float 64.
-        print("Microphone does not support f64 audio, using f32 instead", file=stderr)
-        encoding = 'f32'
+        logger.warn("Microphone does not support f64 audio, using f32 instead")
+        args.encoding = 'f32'
         audio_format = pyaudio.paFloat32
 
     audio = pyaudio.PyAudio()
     frames_per_buffer = 1600
-    stream = audio.open(format=audio_format, channels=channels, rate=sample_rate, input=True, frames_per_buffer=frames_per_buffer)
+    stream = audio.open(format=audio_format, channels=args.channels, rate=args.sample_rate, input=True, frames_per_buffer=frames_per_buffer)
 
     audio_buffer = []
     try:
@@ -104,7 +105,7 @@ def record_and_send(ws, sample_rate: int, encoding: str, base64: bool, request_i
         while not finish_event.is_set():
             data = stream.read(frames_per_buffer)
             audio_buffer.append(data)
-            if base64:
+            if args.base64:
                 ws.send_text(asr_audio_message(data))
             else:
                 ws.send_bytes(data)
@@ -112,17 +113,17 @@ def record_and_send(ws, sample_rate: int, encoding: str, base64: bool, request_i
         pass
     finally:
         # Save audio.
-        filename = './' + request_id + '.wav'
-        if encoding == 's16':
+        filename = './' + args.request_id + '.wav'
+        if args.encoding == 's16':
             numpy_audio = np.frombuffer(b''.join(audio_buffer), dtype=np.int16)
-        elif encoding == 's32':
+        elif args.encoding == 's32':
             numpy_audio = np.frombuffer(b''.join(audio_buffer), dtype=np.int32)
-        elif encoding == 'f32':
+        elif args.encoding == 'f32':
             numpy_audio = np.frombuffer(b''.join(audio_buffer), dtype=np.float32)
         else:
             # Because pyaudio does not support float 64.
             numpy_audio = np.frombuffer(b''.join(audio_buffer), dtype=np.float32)
-        wavfile.write(filename, sample_rate, numpy_audio)
+        wavfile.write(filename, args.sample_rate, numpy_audio)
         print("audio file write to", filename)
 
         finish_event.set()
@@ -133,68 +134,144 @@ def record_and_send(ws, sample_rate: int, encoding: str, base64: bool, request_i
 
 
 def on_message(ws, message):
-    global t0
     try:
         rsp = json.loads(message)
         print(json.dumps(rsp, indent=4))
     except Exception as e:
-        print(f"Error processing message: {e}", file=stderr)
+        logger.error("Error processing message: %s" % e)
 
 
 def on_close(ws, code, reason):
     global finish_event
     finish_event.set()
+    logger.info("Websocket disconnected with code: %s and reason: %s" % (code, reason))
 
 
 def on_error(ws, error):
-    print(f"{datetime.now()} WebSocket error: {error}", file=stderr)
+    logger.error("Websocket error: %s" % error)
 
 
 def on_open(ws):
     args = handle_args()  # Assuming args are accessible; you might need to adjust scope or pass as a global
-    start_message = asr_start_message(request_id, args.sample_rate, args.encoding, args.single_utterance, args.channels, args.rtf_threshold, args.silence_threshold, args.partial_interval)
+    start_message = asr_start_message(args)
     ws.send(start_message)
 
+def read_snsd_json(snsd_json: str) -> Dict[int, List[Tuple[int, int]]]:
+    """
+    Read an snsd json file and extract the start and end time of each segment.
+    @param snsd_json: Path to snsd json file. If not provided/invalid, then an empty dictionary will be returned.
+    @return: A dict of list of tuples. Each tuple contains exactly two integers representing the time of each segment
+    start and end time in ms. Dictionary key is channel index.
+    """
+    snsd_json = os.path.abspath(snsd_json)
+    if not validate_file_path(snsd_json):
+        return dict()
 
-def read_and_send(ws, file_path: str, sample_rate: int, encoding: str, base64: bool, request_id: str, finish_event: threading.Event, channels: int) -> None:
-    print("Reading %s" % file_path)
-    metadata = ffmpeg.probe(file_path)
-    # print(metadata)
-    acodec = 'pcm_' + encoding + 'le'
-    ar = str(sample_rate // 1000) + 'k'
+    ret = dict()
+    with open(snsd_json, 'r') as file:
+        snsd = json.load(file)
+        for i, channel in enumerate(snsd['channels']):
+            segments = []
+            for segment in channel['segments']:
+                if segment['is_speech']:
+                    segments.append((int(segment['start_time'] * 1000), int(segment['end_time'] * 1000)))
+            ret[str(i)] = segments
+
+    logger.debug("According to %s, active segments are: %s" % (snsd_json, ret))
+    return ret
+
+def read_and_send(ws, finish_event: threading.Event, args) -> None:
+    # Only use the first channel for now. 
+    # Need to clarify this: when the audio and snsd are both stereo, what should we do? As we only send active segments
+    # for inference, what if two channels' active segments does not match? Is it possible to create 'interleave' audio
+    # stream in this case?
+    segments = read_snsd_json(args.snsd)['0']
+    logger.debug("Reading %s" % args.file)
+    metadata = ffmpeg.probe(args.file)
+
+    logger.debug("Audio file metadata: %s" % metadata)
+    acodec = 'pcm_' + args.encoding + 'le'
+    ar = str(args.sample_rate // 1000) + 'k'
     try:
         bytes, _ = (
             ffmpeg
-                .input(file_path)
-                .output('-', format=encoding + 'le', acodec=acodec, ar=ar, ac=1)
+                .input(args.file)
+                .output('-', format=args.encoding + 'le', acodec=acodec, ar=ar, ac=1, map_channel='0.0.0')
                 .overwrite_output()
                 .run(capture_stdout=True, capture_stderr=True)
         )
-        print(type(bytes), len(bytes))
+
+        if len(segments) == 0:
+            # audio is a list of tuple. The tuple is: (audio_bytes, start_time_ms, end_time_ms).
+            audios = [(bytes, 0, 0)]
+        else:
+            audios = []
+            for segment in segments:
+                start_time_ms = segment[0]
+                end_time_ms = segment[1]
+                idx_start = int(start_time_ms / 1000 * args.sample_rate * int(args.encoding[1:]) // 8)
+                idx_end = int(end_time_ms / 1000 * args.sample_rate * int(args.encoding[1:]) // 8)
+                audios.append((bytes[idx_start : idx_end], start_time_ms, end_time_ms))
 
         seconds = 0.1
-        chunk_size = int(seconds * sample_rate * int(encoding[1:]) // 8)
-        chunks = (bytes[i: i + chunk_size] for i in range(0, len(bytes), chunk_size))
+        chunk_size = int(seconds * args.sample_rate * int(args.encoding[1:]) // 8)
+        for audio, start_time_ms, end_time_ms in audios:
+            logger.info("Processing %sms -> %sms" % (start_time_ms, end_time_ms))
+            chunks = (audio[i: i + chunk_size] for i in range(0, len(audio), chunk_size))
 
-        if base64:
-            for chunk in chunks:
-                ws.send_text(asr_audio_message(chunk))
-                time.sleep(seconds)
-        else:
-            for chunk in chunks:
-                ws.send_bytes(chunk)
-                time.sleep(seconds)
-        
-        ws.send_text(asr_stop_message())
+            if args.base64:
+                for chunk in chunks:
+                    if finish_event.is_set():
+                        break
+                    ws.send_text(asr_audio_message(chunk))
+                    time.sleep(seconds)
+            else:
+                for chunk in chunks:
+                    if finish_event.is_set():
+                        break
+                    ws.send_bytes(chunk)
+                    time.sleep(seconds)
+            
+            if not finish_event.is_set():
+                ws.send_text(asr_stop_message())
+                time.sleep(1)
+                ws.send_text(asr_start_message(args))
         ws.close()
     except ffmpeg.Error as e:
-        print(e, file=stderr)
+        logger.error(e)
 
 
 def main() -> None:
+    # System init.
+    # Log init.
+    global logger
+    logger = colorlog.getLogger()
+    logger.setLevel(colorlog.DEBUG)
+    handler = colorlog.StreamHandler()
+    formatter = colorlog.ColoredFormatter(
+        "%(log_color)s%(asctime)s - %(levelname)s - %(message)s",
+        datefmt=None,
+        reset=True,
+        log_colors={
+            'DEBUG': 'cyan',
+            'INFO': 'green',
+            'WARNING': 'yellow',
+            'ERROR': 'red',
+            'CRITICAL': 'red,bg_white',
+        },
+        secondary_log_colors={},
+        style='%'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
+    # Command line argument init.
     args = handle_args()
     global request_id
     request_id = args.request_id if args.request_id != '' else str(uuid.uuid4())
+    args.request_id = request_id
+    logger.debug(args)
+
 
     if args.language == 'auto':
         # url = 'wss://asr-whisper-http.api.emotechlab.com/ws/assess'
@@ -213,11 +290,16 @@ def main() -> None:
     receive_thread = threading.Thread(target=ws.run_forever)
     receive_thread.start()
 
+    send_thread = threading.Thread(target=record_and_send, args=(ws, finish_event, args))
     args.file = os.path.abspath(args.file)
-    if validate_file_path(args.file):
-        send_thread = threading.Thread(target=read_and_send, args=(ws, args.file, args.sample_rate, args.encoding, args.base64, request_id, finish_event, args.channels))
+    if args.file == '':
+        logger.debug("Using microphone as input source as no input file is provided")
+    elif validate_file_path(args.file):
+        send_thread = threading.Thread(target=read_and_send, args=(ws, finish_event, args))
     else:
-        send_thread = threading.Thread(target=record_and_send, args=(ws, args.sample_rate, args.encoding, args.base64, request_id, finish_event, args.channels))
+        logger.critical("Invalid input file: %s" % args.file)
+        ws.close()
+        exit(-1)
     send_thread.start()
 
     try:
@@ -237,7 +319,7 @@ if __name__ == '__main__':
     try:
         main()
     except OSError as e:
-        print(e, file=stderr)
+        logger.error(e)
         print("Below is a summary of your input devices:", file=stderr)
         p = pyaudio.PyAudio()
         for i in range(p.get_device_count()):
@@ -245,4 +327,4 @@ if __name__ == '__main__':
             print(f"{i}. {dev['name']} - Max Input Channels: {dev['maxInputChannels']}", file=stderr)
         p.terminate()
     except Exception as e:
-        print(type(e), e, file=stderr)
+        logger.error("%s: %s" % (type(e), e))

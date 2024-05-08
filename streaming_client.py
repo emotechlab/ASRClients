@@ -291,7 +291,7 @@ def main() -> None:
     receive_thread.start()
 
     send_thread = threading.Thread(target=record_and_send, args=(ws, finish_event, args))
-    args.file = os.path.abspath(args.file)
+    args.file = os.path.abspath(args.file) if args.file != '' else ''
     if args.file == '':
         logger.debug("Using microphone as input source as no input file is provided")
     elif validate_file_path(args.file):

@@ -1,4 +1,5 @@
-numpy
-pyaudio
-scipy
-websocket-client
+colorlog==6.8.2
+numpy==1.24.4
+PyAudio==0.2.14
+scipy==1.10.1
+websocket-client==1.8.0

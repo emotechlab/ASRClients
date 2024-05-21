@@ -68,7 +68,7 @@ On Linux:
 ```shell
 sudo apt-get install libasound-dev portaudio19-dev libportaudio2 libportaudiocpp0
 sudo apt-get install ffmpeg libav-tools
-pipe install pyaudio
+pip3 install pyaudio
 ```
 
 On Windows:

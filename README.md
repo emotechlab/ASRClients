@@ -45,12 +45,25 @@ Toggle this on to prevent server from closing your websocket communication after
 The token you get from Emotech, It's used to validate who you are.
 
 ## How To Use
-The client uses three open-source library as dependencies:
-- [pyaudio](https://pypi.org/project/PyAudio/), MIT license.
-- [websockets](https://pypi.org/project/websockets/), BSD license.
+We use [uv](https://github.com/astral-sh/uv) to manage our environment. It's best if you can follow these commands:
 
+```shell
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-You can install them via `pip3 install -r requirements.txt`
+# Create virtual environment with python 3.11 and activate it
+uv venv --python=3.11 && source .venv/bin/activate
+
+# Install all dependencies
+uv sync
+
+# If you want to add more dependencies, please do
+uv add <DEPENDENCY_NAME> && uv lock
+
+# OPTIONAL, if you prefer to use requirements.txt and pip rather than uv , then
+uv pip compile pyproject.toml -o requirements.txt
+pip3 install -r requirements.txt
+```
 
 ### Troubleshooting
 `pyaudio` might failed with a single `pip` command as it relies on other libraries. Here is a detailed instruction on fixing it:
@@ -60,7 +73,7 @@ On MacOS:
 # Install brew, skip if you have it already.
 mkdir homebrew && curl -L https://github.com/Homebrew/brew/tarball/master | tar xz --strip 1 -C homebrew
 
-brew install portaudio
+brew install portaudio ffmpeg
 pip3 install pyaudio
 ```
 

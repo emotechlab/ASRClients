@@ -1,0 +1,18 @@
+[project]
+name = "ASR_client"
+version = "0.1.0"
+description = "Emotech provided python client to interact with our ASR service"
+requires-python = ">=3.11"
+
+dependencies = [
+    "colorlog >= 6.8.2",
+    "ffmpeg-python == 0.2.0",
+    "numpy >= 1.26.4",
+    "PyAudio == 0.2.14",
+    "scipy == 1.10.1",
+    "websocket-client >= 1.8.0",
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

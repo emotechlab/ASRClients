@@ -68,12 +68,6 @@ def handle_args():
         help="Number of channels to send to the server",
     )
     parser.add_argument(
-        "--rtf-threshold",
-        type=float,
-        default=0.3,
-        help="Threshold to cancel a Whisper inference task. [DEFAULT] 0.3",
-    )
-    parser.add_argument(
         "--silence-threshold",
         type=int,
         default=600,
@@ -110,7 +104,6 @@ def asr_start_message(args) -> str:
         },
         "config": {
             "single_utterance": args.single_utterance,
-            "rtf_threshold": args.rtf_threshold,
             "silence_threshold": args.silence_threshold,
             "partial_interval": args.partial_interval,
             "non_partial_interval": 3000,

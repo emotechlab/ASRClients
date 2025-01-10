@@ -21,6 +21,7 @@ from websocket import WebSocketApp
 
 # Global variables.
 finish_event = threading.Event()
+all_data_uploaded_event = threading.Event()
 request_id = ""
 logger = None
 
@@ -112,8 +113,7 @@ def asr_start_message(args) -> str:
             "single_utterance": args.single_utterance,
             "rtf_threshold": args.rtf_threshold,
             "silence_threshold": args.silence_threshold,
-            "partial_interval": args.partial_interval,
-            "non_partial_interval": 3000,
+            "partial_interval": None, #args.partial_interval,
         },
         "channel_index": None,
     }
@@ -200,6 +200,8 @@ def on_message(ws, message):
     try:
         rsp = json.loads(message)
         print(json.dumps(rsp, indent=4))
+        if not rsp['is_partial'] and all_data_uploaded_event.is_set():
+            ws.close()
     except Exception as e:
         logger.error("Error processing message: %s" % e)
 
@@ -251,6 +253,7 @@ def read_snsd_json(snsd_json: str) -> Dict[str, List[Tuple[int, int]]]:
 
 
 def read_and_send(ws, finish_event: threading.Event, args) -> None:
+    time.sleep(2)
     # Only use the first channel for now.
     # Need to clarify this: when the audio and snsd are both stereo, what should we do? As we only send active segments
     # for inference, what if two channels' active segments does not match? Is it possible to create 'interleave' audio
@@ -317,7 +320,7 @@ def read_and_send(ws, finish_event: threading.Event, args) -> None:
                 ws.send_text(asr_stop_message())
                 time.sleep(1)
                 ws.send_text(asr_start_message(args))
-        ws.close()
+        all_data_uploaded_event.set()
     except ffmpeg.Error as e:
         logger.error(e)
 
@@ -354,10 +357,10 @@ def main() -> None:
     logger.debug(args)
 
     if args.language == "auto":
-        # url = 'wss://asr-whisper-http.api.emotechlab.com/ws/assess'
+        # url = 'wss://asr-whisper.api.emotechlab.com/ws/assess'
         url = "ws://goliath.emotechlab.com:5555/ws/assess"
     else:
-        # url = 'wss://asr-whisper-http.api.emotechlab.com/ws/' + args.language + '/assess'
+        # url = 'wss://asr-whisper.api.emotechlab.com/ws/' + args.language + '/assess'
         url = "ws://goliath.emotechlab.com:5555/ws/" + args.language + "/assess"
 
     ws = WebSocketApp(

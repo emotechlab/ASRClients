@@ -200,7 +200,7 @@ def on_message(ws, message):
     try:
         rsp = json.loads(message)
         print(json.dumps(rsp, indent=4))
-        if not rsp['is_partial'] and all_data_uploaded_event.is_set():
+        if not rsp["is_partial"] and all_data_uploaded_event.is_set():
             ws.close()
     except Exception as e:
         logger.error("Error processing message: %s" % e)

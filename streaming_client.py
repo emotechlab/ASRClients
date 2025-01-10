@@ -21,7 +21,6 @@ from websocket import WebSocketApp
 
 # Global variables.
 finish_event = threading.Event()
-all_data_uploaded_event = threading.Event()
 request_id = ""
 logger = None
 
@@ -132,9 +131,10 @@ def asr_audio_message(data: bytes) -> str:
     return json.dumps(audio_message)
 
 
-def asr_stop_message() -> str:
+def asr_stop_message(disconnect: bool) -> str:
     stop_message = {
         "request": "stop",
+        "disconnect": disconnect,
     }
     return json.dumps(stop_message)
 
@@ -200,8 +200,6 @@ def on_message(ws, message):
     try:
         rsp = json.loads(message)
         print(json.dumps(rsp, indent=4))
-        if not rsp["is_partial"] and all_data_uploaded_event.is_set():
-            ws.close()
     except Exception as e:
         logger.error("Error processing message: %s" % e)
 
@@ -316,10 +314,10 @@ def read_and_send(ws, finish_event: threading.Event, args) -> None:
                     time.sleep(seconds)
 
             if not finish_event.is_set():
-                ws.send_text(asr_stop_message())
+                ws.send_text(asr_stop_message(False))
                 time.sleep(1)
                 ws.send_text(asr_start_message(args))
-        all_data_uploaded_event.set()
+        ws.send_text(asr_stop_message(True))
     except ffmpeg.Error as e:
         logger.error(e)
 

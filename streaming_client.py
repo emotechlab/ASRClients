@@ -113,7 +113,7 @@ def asr_start_message(args) -> str:
             "single_utterance": args.single_utterance,
             "rtf_threshold": args.rtf_threshold,
             "silence_threshold": args.silence_threshold,
-            "partial_interval": None, #args.partial_interval,
+            "partial_interval": args.partial_interval,
         },
         "channel_index": None,
     }
@@ -253,7 +253,6 @@ def read_snsd_json(snsd_json: str) -> Dict[str, List[Tuple[int, int]]]:
 
 
 def read_and_send(ws, finish_event: threading.Event, args) -> None:
-    time.sleep(2)
     # Only use the first channel for now.
     # Need to clarify this: when the audio and snsd are both stereo, what should we do? As we only send active segments
     # for inference, what if two channels' active segments does not match? Is it possible to create 'interleave' audio

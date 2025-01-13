@@ -113,7 +113,6 @@ def asr_start_message(args) -> str:
             "rtf_threshold": args.rtf_threshold,
             "silence_threshold": args.silence_threshold,
             "partial_interval": args.partial_interval,
-            "non_partial_interval": 3000,
         },
         "channel_index": None,
     }
@@ -132,9 +131,10 @@ def asr_audio_message(data: bytes) -> str:
     return json.dumps(audio_message)
 
 
-def asr_stop_message() -> str:
+def asr_stop_message(disconnect: bool) -> str:
     stop_message = {
         "request": "stop",
+        "disconnect": disconnect,
     }
     return json.dumps(stop_message)
 
@@ -314,10 +314,10 @@ def read_and_send(ws, finish_event: threading.Event, args) -> None:
                     time.sleep(seconds)
 
             if not finish_event.is_set():
-                ws.send_text(asr_stop_message())
+                ws.send_text(asr_stop_message(False))
                 time.sleep(1)
                 ws.send_text(asr_start_message(args))
-        ws.close()
+        ws.send_text(asr_stop_message(True))
     except ffmpeg.Error as e:
         logger.error(e)
 
@@ -354,10 +354,10 @@ def main() -> None:
     logger.debug(args)
 
     if args.language == "auto":
-        # url = 'wss://asr-whisper-http.api.emotechlab.com/ws/assess'
+        # url = 'wss://asr-whisper.api.emotechlab.com/ws/assess'
         url = "ws://goliath.emotechlab.com:5555/ws/assess"
     else:
-        # url = 'wss://asr-whisper-http.api.emotechlab.com/ws/' + args.language + '/assess'
+        # url = 'wss://asr-whisper.api.emotechlab.com/ws/' + args.language + '/assess'
         url = "ws://goliath.emotechlab.com:5555/ws/" + args.language + "/assess"
 
     ws = WebSocketApp(
